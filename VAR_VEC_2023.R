@@ -11,7 +11,7 @@ if (1) {
   library(tseries)
 }
 
-# Parámetros del  modelo
+# Parámetros del modelo
 #file.name    = "C:/Users/maico/OneDrive - Universidad Nacional de Colombia/Oliver Pardo/Modelos Multiecuaciones (VAR)/2_datos/Enders.xlsx"
 file.name    = "BELIZE_REV_EXP_DATA.xlsx"
 variables    = c("Total Revenue and Grants","Total Expenditure")[1:2] # Nombres de columnas que contiene las variables para el VAR.
