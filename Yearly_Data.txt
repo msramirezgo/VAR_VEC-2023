@@ -1,0 +1,12 @@
+On yearly Data:
+*Revenue
+   - Total Revenue from Fiscal_Executed.xlsx
+   - Recurrent Revenue from Fiscal_Executed.xlsx
+   - Tax Revenue from Fiscal_Executed.xlsx
+
+*Expedniture
+   - Total Expenditures from Fiscal_Budgeted.xlsx
+   - Total recurrent Expenditure from Fiscal_Budgeted.xlsx
+*GDP
+   - GDP data from Anual GDP by activity / Current prices 
+          (Source. Statistical institute of Belize)
