@@ -11,7 +11,7 @@ if (1) {
   library(tseries)
 }
 
-# Parámetros del modelo
+# Parámetros del  modelo
 #file.name    = "C:/Users/maico/OneDrive - Universidad Nacional de Colombia/Oliver Pardo/Modelos Multiecuaciones (VAR)/2_datos/Enders.xlsx"
 file.name    = "BELIZE_REV_EXP_DATA.xlsx"
 variables    = c("Total Revenue and Grants","Total Expenditure")[1:2] # Nombres de columnas que contiene las variables para el VAR.
@@ -29,7 +29,8 @@ Data = ts(Data[,variables], start = c(1989,2), frequency = 4)
 x11()
 par(mfrow=c(length(variables),1))
 for (i in variables) {
-  plot.ts(Data[,i], size=2,ts.colour="red", xlab="",ylab="", main=i)
+  plot.ts(Data[,i], col="steelblue", xlab="",ylab="", main=i)
+  
 } # Hacer análisis manual de resultados del test. 
 
 
@@ -48,7 +49,7 @@ if (diff.all==TRUE)   {
 x11()
 par(mfrow=c(ncol(Data),1))
 for(i in variables){
-plot.ts(Data[,i],size=2, color="red", xlab="",ylab="", main=i)
+  plot.ts(Data[,i],size=2, color="red", xlab="",ylab="", main=i)
 }
 # Pruebas de raíz unitaria ------------------------------------------------
 type=matrix(NA, nrow=length(variables), ncol=1, dimnames=list(variables, "type"))
@@ -102,7 +103,7 @@ VAR.none  = VAR(Data, p=AIC.none, type="none" )
 # Creamos dataframe con el respectivo AIC de cada modelo para elegir el que mejor se ajuste. 
 AIC.VAR   = matrix(c(AIC(VAR.both),AIC(VAR.const), AIC(VAR.none)), nrow=1, ncol=3, dimnames=list("AIC", c("both", "const", "none")))
 VAR.type  = colnames(AIC.VAR)[which(AIC.VAR==min(AIC.VAR))]   # Se recomiendo ver la significancia de los parámetros "const" y "trend" de forma manual para
-                                                              # dar robustes a los resultados o para corregir de ser necesario. 
+# dar robustes a los resultados o para corregir de ser necesario. 
 
 if (VAR.type=="both")  {
   VAR=VAR.both
@@ -128,8 +129,8 @@ x11()
 for (i in lags.pt.test) {
   plot(serial.test(VAR, lags.pt = i, type = "PT.asymptotic"), title=paste(i," lags"))
 } # Navegue por el dispositivo gráfico para ver el 
-                              # resumen de resultados del Test para cada variable
-                              # y para cada orden de rezagos. 
+# resumen de resultados del Test para cada variable
+# y para cada orden de rezagos. 
 
 
 # Prueba de COintegración -------------------------------------------------
@@ -189,7 +190,7 @@ if (coint!=0) {
   # y para cada orden de rezagos. 
   
   
-  #Graficamos los residuales para 20 lags: se grafican los residuales, su distribución, la ACF y PACF de los residuales y
+  #Graficamos los residuales para los lags determinados: se grafican los residuales, su distribución, la ACF y PACF de los residuales y
   #la ACF y PACF de los residuales al cuadrado (proxy para heterocedasticidad)
   x11()
   for (i in colnames(Data)) {
