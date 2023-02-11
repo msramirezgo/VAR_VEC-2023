@@ -10,34 +10,47 @@ if (1) {
   library(readxl)
   library(tseries)
   library(tsDyn)
+  library(dynlm)
+  library(aTSA)
 }
 
 # Parámetros del  modelo
-#file.name    = "C:/Users/maico/OneDrive - Universidad Nacional de Colombia/Oliver Pardo/Modelos Multiecuaciones (VAR)/2_datos/Enders.xlsx"
-file.name    = "Belize_Quarterly.xlsx"
-#For yearly data
-#variables    = c("Total Revenue and Grants","Total Expenditure")[1:2] # Nombres de columnas que contiene las variables para el VAR.
-#For quarterly data
-variables    = c("Revenue Current",	"Revenue Current - Base 2000",	"Total Revenue and Grants - Base 2000",
+frequency     = c("Quarterly", "Yearly")[1]
+if(frequency=="Quarterly"){
+  file.name  = "Belize_Quarterly.xlsx"
+  # Nombres de columnas que contiene las variables para el VAR.
+  variables  = c("Revenue Current",	"Revenue Current - Base 2000",	"Total Revenue and Grants - Base 2000",
                  "Total Revenue and Grants",	"Expenditure Current",	"Expenditure Current - Base 2000",	
                  "Total Expenditure",	"Total Expenditure - Base 2000",	"GDP - Base 2000",	"GDP - Base 2014")[c(2,9)]
+}
+
+#For yearly data
+if (frequency=="Yearly"){
+  file.name    = "Belize_Yearly.xlsx"
+  # Nombres de columnas que contiene las variables para el VAR.
+  variables    = c("Total revenues and grants", "Recurrent Revenue",	"Tax Revenue",
+                   "Total expenditures", "Total recurrent expenditure",	"GDP")[c(5,6)]
+} 
+ 
 log.all      = c(TRUE,FALSE)[1]           # Verdadero transforma todas las series en logaritmos.
 diff.all     = c(TRUE,FALSE)[2]           # Verdadero obtiene la primera diferencia de las series.
 max.lags     = 10                         # Número máximo posible para el orden p del VAR. 
 lags.pt.test = c(10,15,20,30,50,75)       # Rezagos a usar para las pruebas de autocorrelación serial. (Portmanteau statistic)
-n.ahead      = 15                         # Número de pasos adelante para el pronóstico
-
+n.ahead      = 4                         # Número de pasos adelante para el pronóstico.
+EG.procedure = c(TRUE,FALSE)[2]           # Ejecutar la metodología de Engle & Granger.
 # Datos -------------------------------------------------------------------
 Data = read_xlsx(file.name)
-Data = ts(Data[,variables], start = c(2000,1), frequency = 4)
-Data = ts(Data[1:nrow(Data)-1,], start = c(2000,1), frequency = 4)
+if (frequency=="Quarterly") Data = ts(Data[1:nrow(Data)-1,variables], start = c(2000,1), frequency = 4)
+if (frequency=="Yearly")    Data = ts(Data[,variables],               start = c(1999),   frequency = 1)
+if (variables[1]=="Total expenditures"|variables[1]=="Total recurrent expenditure") {
+ Data=Data[3:nrow(Data),] 
+}
 
 # Graficación -------------------------------------------------------------
 x11()
 par(mfrow=c(length(variables),1))
 for (i in variables) {
   plot.ts(Data[,i], col="steelblue", xlab="",ylab="", main=i)
-  
 } # Hacer análisis manual de resultados del test. 
 
 
@@ -55,8 +68,8 @@ if (diff.all==TRUE) {
 }
 x11()
 par(mfrow=c(ncol(Data),1))
-for(i in variables){
-plot(Data[,i], col="red", xlab="",ylab="", main=i)
+for (i in variables) {
+  plot.ts(Data[,i], col="steelblue", xlab="",ylab="", main=i)
 }
 # Pruebas de raíz unitaria ------------------------------------------------
 type=matrix(NA, nrow=length(variables), ncol=1, dimnames=list(variables, "type"))
@@ -68,11 +81,11 @@ for (i in variables) {
   none  = ur.df(Data[,i], lags=6, selectlags = "AIC",type="none")
   
   #---- Cuando se rechaze H0 de raíz unitaria ----#
-  if (trend@teststat[,"phi3"]<trend@cval["phi3","5pct"] & trend@teststat[,"tau3"]<trend@cval["tau3","5pct"]) {
+  if (trend@teststat[,"phi3"]>trend@cval["phi3","5pct"] & trend@teststat[,"tau3"]<trend@cval["tau3","5pct"]) {
     type[i,]="trend"
     cat(i,"\n Type: Trend \n tau: Null hyphotesis for unitary root rejected \n")
     Int.Order=0
-  } else if (drift@teststat[,"phi1"]<drift@cval["phi1","5pct"] & drift@teststat[,"tau2"]<drift@cval["tau2","5pct"]){
+  } else if (drift@teststat[,"phi1"]>drift@cval["phi1","5pct"] & drift@teststat[,"tau2"]<drift@cval["tau2","5pct"]){
     type[i,]="drift"
     cat(i,"\n Type: Drift \n tau: Null hyphotesis for unitary root rejected \n")
     Int.Order=0
@@ -96,14 +109,17 @@ if (sum(Int.Order)==0) {
   cat("Series are I(0):Estimating a VAR in levels.")
 }else if (sum(Int.Order)==length(variables)) cat("Series are I(1): Estimating VAR and  evaluating for cointegration (Johansen) \n")
 
+if (frequency=="Yearly")    lagmax=2
+if (frequency=="Quarterly") lagmax=6
+
 # Extraemos los rezagos óptimos para el modelo con tendencia y deriva.
-P.tr.cons = VARselect(Data, lag.max=6, type="both", season=NULL)
+P.tr.cons = VARselect(Data, lag.max=lagmax, type="both", season=NULL)
 AIC.tr    = which(t(P.tr.cons$criteria)==min(P.tr.cons$criteria["AIC(n)",]))
 # Extraemos los rezagos óptimos para el modelo con deriva.
-P.cons    = VARselect(Data, lag.max=6, type="const", season=NULL)
+P.cons    = VARselect(Data, lag.max=lagmax, type="const", season=NULL)
 AIC.cons  = which(t(P.cons$criteria)   ==min(P.cons$criteria["AIC(n)",]))
 # Extraemos los rezagos óptimos para el modelo sin términos deterministicos.
-P.none    = VARselect(Data, lag.max=6, type="none", season=NULL) 
+P.none    = VARselect(Data, lag.max=lagmax, type="none", season=NULL) 
 AIC.none  = which(t(P.none$criteria)   ==min(P.none$criteria["AIC(n)",]))
 
 
@@ -147,7 +163,7 @@ eigen=ca.jo(Data,
 
 summary(eigen) 
 
-for(i in 1:ncol(Data)){
+for(i in 1:length(eigen@teststat)){
   if (eigen@teststat[i]>eigen@cval[i,"5pct"]) {
     cat("Matrix has rank",i,"\n")
     rank=i
@@ -170,7 +186,7 @@ if(rank==length(variables)&sum(Int.Order)==0){
   rank.type="complete"
 }
 if(rank==length(variables)&sum(Int.Order)==length(variables)){
-  cat("Complete Rank & series are I(I): Estimate a VAR in first differences \n")
+  cat("Complete Rank & series are I(1): Estimate a VAR in first differences \n")
   rank.type="complete"
 }
 
@@ -266,7 +282,7 @@ if (rank.type=="reduced") {
     cat("Using VAR trend and constant. \n")}
   if (VAR.type=="const") {
     VAR=VAR.const
-    cat("Using VAR with contant. \n")}
+    cat("Using VAR with constant. \n")}
   if (VAR.type=="none")  {
     VAR=VAR.none
     cat("Usig VAR with no deterministic terms. \n")}
@@ -289,7 +305,7 @@ if (EG.procedure==TRUE) {
        lty = c(2, 1),
        lwd = 2)
   x11()
-  plot(Data.plot[,"spread"],
+  plot.ts(Data.plot[,"spread"],
        col = "steelblue",
        lwd = 2,
        ylab="spread")
@@ -368,3 +384,4 @@ if(0){
     
   
 }
+
