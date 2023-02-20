@@ -13,38 +13,47 @@ if (1) {
   library(dynlm)
   library(aTSA)
 }
-
 # Parámetros del  modelo
-frequency     = c("Quarterly", "Yearly")[1]
+frequency     = c("Quarterly", "Yearly")[2]
 if(frequency=="Quarterly"){
   file.name  = "Belize_Quarterly.xlsx"
   # Nombres de columnas que contiene las variables para el VAR.
   variables  = c("Revenue Current",	"Revenue Current - Base 2000",	"Total Revenue and Grants - Base 2000",
                  "Total Revenue and Grants",	"Expenditure Current",	"Expenditure Current - Base 2000",	
                  "Total Expenditure",	"Total Expenditure - Base 2000",	"GDP - Base 2000",	"GDP - Base 2014")[c(2,9)]
+  start.date = c(2000,1)
+  frequency  = 4
 }
 
 #For yearly data
 if (frequency=="Yearly"){
-  file.name    = "Belize_Yearly.xlsx"
+  file.name    = "Yearly_Current.xlsx"
   # Nombres de columnas que contiene las variables para el VAR.
-  variables    = c("Total revenues and grants", "Recurrent Revenue",	"Tax Revenue",
-                   "Total expenditures", "Total recurrent expenditure",	"GDP")[c(5,6)]
+  variables    = c( "Total expenditures"
+                    ,"Total recurrent expenditure"
+                    ,"Personal emoluments"
+                    ,"Pensions and ex-gratia"
+                    ,"Goods and services"
+                    ,"Debt service-interest and other charges"
+                    ,"GDP")[c(6,7)]
+  start.date = c(2001)
+  frequency  = 1
 } 
- 
-log.all      = c(TRUE,FALSE)[1]           # Verdadero transforma todas las series en logaritmos.
-diff.all     = c(TRUE,FALSE)[2]           # Verdadero obtiene la primera diferencia de las series.
-max.lags     = 10                         # Número máximo posible para el orden p del VAR. 
-lags.pt.test = c(10,15,20,30,50,75)       # Rezagos a usar para las pruebas de autocorrelación serial. (Portmanteau statistic)
-n.ahead      = 4                         # Número de pasos adelante para el pronóstico.
-EG.procedure = c(TRUE,FALSE)[2]           # Ejecutar la metodología de Engle & Granger.
+
+log.all      = c(TRUE,FALSE)[1]                # Verdadero transforma todas las series en logaritmos.
+diff.all     = c(TRUE,FALSE)[2]                # Verdadero obtiene la primera diferencia de las series.
+max.lags     = 10                              # Número máximo posible para el orden p del VAR. 
+lags.pt.test = c(10,15,20,30,50,75)            # Rezagos a usar para las pruebas de autocorrelación serial. (Portmanteau statistic)
+n.ahead      = 4                               # Número de pasos adelante para el pronóstico.
+eigen.confidence = c("10pct","5pct","1pct")[2] # Nivel de significancia para la prueba de johanssen
+EG.procedure = c(TRUE,FALSE)[2]                # Ejecutar la metodología de Engle & Granger.
+
 # Datos -------------------------------------------------------------------
-Data = read_xlsx(file.name)
-if (frequency=="Quarterly") Data = ts(Data[1:nrow(Data)-1,variables], start = c(2000,1), frequency = 4)
-if (frequency=="Yearly")    Data = ts(Data[,variables],               start = c(1999),   frequency = 1)
-if (variables[1]=="Total expenditures"|variables[1]=="Total recurrent expenditure") {
- Data=Data[3:nrow(Data),] 
-}
+Data = read_xlsx(paste0(getwd(),"/",file.name))
+Data = ts(Data[,variables], start = start.date,   frequency = frequency)
+#if (variables[1]=="Total expenditures"|variables[1]=="Total recurrent expenditure") {
+# Data=Data[3:nrow(Data),] 
+#}
 
 # Graficación -------------------------------------------------------------
 x11()
@@ -133,47 +142,46 @@ VAR.none  = VAR(Data, p=AIC.none, type="none" )
 # Creamos dataframe con el respectivo AIC de cada modelo para elegir el que mejor se ajuste. 
 AIC.VAR   = matrix(c(AIC(VAR.both),AIC(VAR.const), AIC(VAR.none)), nrow=1, ncol=3, dimnames=list("AIC", c("both", "const", "none")))
 VAR.type  = colnames(AIC.VAR)[which(AIC.VAR==min(AIC.VAR))]   # Se recomiendo ver la significancia de los parámetros "const" y "trend" de forma manual para
-                                                              # dar robustes a los resultados o para corregir de ser necesario. 
+# dar robustes a los resultados o para corregir de ser necesario. 
 
 if (VAR.type=="both")  {
   VAR=VAR.both
   cat("Using VAR trend and constant. \n")}
 if (VAR.type=="const") {
   VAR=VAR.const
-  cat("Using VAR with contant. \n")}
+  cat("Using VAR with constant. \n")}
 if (VAR.type=="none")  {
   VAR=VAR.none
   cat("Usig VAR with no deterministic terms. \n")}
 
 # Prueba de Cointegración (Rango de Pi)---------------------------------------
 
-eigen=ca.jo(Data, 
-            ecdet = if (VAR.type=="both") {
+eigen=ca.jo(Data, ecdet = if (VAR.type=="both") {
               "trend"
             }else{
               VAR.type
             }, 
-            type = "trace", K = if (VAR.type=="both") {
-              AIC.tr
-            }else if(VAR.type=="const"){AIC.cons} else{
-              AIC.none
-            }, 
+            type = "eigen", K = 2, 
             spec = "longrun", season = NULL)
 
 
 summary(eigen) 
-
+critical.values=rev(eigen@cval[,eigen.confidence])
 for(i in 1:length(eigen@teststat)){
-  if (eigen@teststat[i]>eigen@cval[i,"5pct"]) {
+  if (rev(eigen@teststat)[i]>critical.values[i]) {
     cat("Matrix has rank",i,"\n")
     rank=i
     rank.type="reduced"
-  } else {
+  }
+  if(rev(eigen@teststat)[1]<critical.values[1]&rev(eigen@teststat)[2]<critical.values[2]){
+    rank.type = "zero"
+    rank      = 0
+  } else if(eigen@teststat[1]>critical.values[1]&rev(eigen@teststat)[2]>critical.values[2]){
+    rank.type = "complete"
     rank=length(variables)
-    rank.type="complete"
   }
 }
-if(eigen@teststat[1]>eigen@cval[1,"5pct"]&sum(Int.Order)==length(variables)){
+if(rank==0&sum(Int.Order)==length(variables)){
   cat("Rank 0 & series are I(1): Estimate a VAR in differences \n")
   rank.type="zero"
 }
@@ -201,51 +209,30 @@ if (rank.type=="reduced") {
   coefA(VEC)
   # Representación VAR
   VAR.rep = vec2var(eigen, r=rank)
-  
-  # Validación de supuestos: representación VAR
- 
-  # Autocorrelación: PT.asymptotic es para muestra grande y "PT.adjusted" es corrección para muestra pequeña.
-  
-  for (i in lags.pt.test) {
-    PT.test=serial.test(VAR.rep, lags.pt = i, type = if(nrow(Data>=100))"PT.asymptotic" else "PT.adjusted")
-    cat(i,"lags", "\n","p-value =" ,PT.test$serial$p.value, if(PT.test$serial$p.value>0.05){
-      "No se rechaza el supuesto"
-    }else "Se rechaza el supuesto","\n")
-  } 
-  
-  #Graficación
-  
-  x11()
-  for (i in lags.pt.test) {
-    plot(serial.test(VAR.IR, lags.pt = i, type = "PT.asymptotic"), title=paste(i," lags"))
-  } 
-  # Navegue por el dispositivo gráfico para ver el 
-  # resumen de resultados del Test para cada variable
-  # y para cada orden de rezagos. 
-  
-  ##Test Jarque-Bera multivariado
-  norm.test=normality.test(VAR.IR) #
-  if(norm.test$jb.mul$JB$p.value<0.05)cat("Rejection for normality.")
-  if(norm.test$jb.mul$JB$p.value>0.05)cat("No rejection for normality.")
-  
+
   # Pronóstico de la representación VAR
   cat("Forecasting VECM in it's VAR representation \n")
+  predict =predict(VAR.rep, n.ahead=n.ahead)
+  forecast    = cbind(as.matrix(predict$fcst[[1]][,"fcst"]),as.matrix(predict$fcst[[2]][,"fcst"]))
+  if(log.all==TRUE)levels = exp(as.matrix(rbind(Data, forecast)))
+  write.xlsx(levels, file = paste0("VECM_",n.ahead,"_step_ahead_forecast_",variables[1],"_With_",variables[2],".xlsx"))
   x11()
-  predict=predict(VAR.IR, n.ahead=n.ahead)
   plot(predict)
   
-
+  
 }else if (rank.type=="complete" & sum(Int.Order)==0){
   # Pronóstico con VAR en niveles
   cat("Forecasting VAR in levels")
   predict=predict(VAR, n.ahead=n.ahead)
-  for (i in names(predict$fcst)) {
-    if(log.all==TRUE){
-      write.csv(exp(predict$fcst[i][[1]]), file=paste0(n.ahead, " step ahead forecast of ",i))
-    }else{
-      write.csv(predict$fcst[i], file=paste0(n.ahead, " step ahead forecast of ",i))
-    }
+  forecast    = cbind(as.matrix(predict$fcst[[1]][,"fcst"]),as.matrix(predict$fcst[[2]][,"fcst"]))
+  levels      = as.matrix(rbind(Data, forecast))
+  for (i in nrow(Data):(nrow(Data)+n.ahead-1)) {
+    levels[i+1,]=levels[i,]+levels[i+1,]
   }
+  levels = ts(levels, start = start.date,   frequency = frequency)
+  if(log.all==TRUE)levels = exp(levels)
+  write.xlsx(levels, file = paste0("VAR_",n.ahead,"_step_ahead_forecast_",variables[1],"_With_",variables[2],".xlsx"))
+  
   x11()
   plot(predict)
   
@@ -264,7 +251,7 @@ if (rank.type=="reduced") {
   if(norm.test$jb.mul$JB$p.value<0.05)cat("Rejection for normality.")
   if(norm.test$jb.mul$JB$p.value>0.05)cat("No rejection for normality.")
   
-}else if (rank.type=="complete" & sum(Int.Order)==length(variables)){
+}else if (rank.type=="zero" & sum(Int.Order)==length(variables)){
   # Estimación del VAR ------------------------------------------------------
   
   # Estimamos los modelos con tendencia y constante, sólo constante, y sólo términos deterministicos.
@@ -288,8 +275,16 @@ if (rank.type=="reduced") {
     cat("Usig VAR with no deterministic terms. \n")}
   
   cat("Forecasting VAR in first differences \n")
+  predict     = predict(VAR, n.ahead=n.ahead)
+  forecast    = cbind(as.matrix(predict$fcst[[1]][,"fcst"]),as.matrix(predict$fcst[[2]][,"fcst"]))
+  levels      = as.matrix(rbind(Data, forecast))
+  for (i in nrow(Data):(nrow(Data)+n.ahead-1)) {
+    levels[i+1,]=levels[i,]+levels[i+1,]
+  }
+  levels = ts(levels, start = start.date,   frequency = frequency)
+  if(log.all==TRUE)levels = exp(levels)
+  write.xlsx(levels, file = paste0("VAR_",n.ahead,"_step_ahead_forecast_",variables[1],"_With_",variables[2],".xlsx"))
   x11()
-  predict=predict(VAR, n.ahead=n.ahead)
   plot(predict)
 }
 
@@ -306,9 +301,9 @@ if (EG.procedure==TRUE) {
        lwd = 2)
   x11()
   plot.ts(Data.plot[,"spread"],
-       col = "steelblue",
-       lwd = 2,
-       ylab="spread")
+          col = "steelblue",
+          lwd = 2,
+          ylab="spread")
   
   type=matrix(NA, nrow=length(variables), ncol=1, dimnames=list(variables, "type"))
   Int.Order=c()
@@ -381,7 +376,7 @@ if(0){
   # resumen de resultados del Test para cada variable
   # y para cada orden de rezagos. 
   
-    
+  
   
 }
 
