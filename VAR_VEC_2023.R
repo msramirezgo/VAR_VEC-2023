@@ -15,38 +15,60 @@ if (1) {
 }
 # Parámetros del  modelo
 frequency     = c("Quarterly", "Yearly")[2]
+log.all      = c(TRUE,FALSE)[1]                # Verdadero transforma todas las series en logaritmos.
+diff.all     = c(TRUE,FALSE)[2]                # Verdadero obtiene la primera diferencia de las series.
+max.lags     = 10                              # Número máximo posible para el orden p del VAR. 
+lags.pt.test = c(10,15,20,30,50,75)            # Rezagos a usar para las pruebas de autocorrelación serial. (Portmanteau statistic)
+n.ahead      = 14                               # Número de pasos adelante para el pronóstico.
+eigen.confidence = c("10pct","5pct","1pct")[2] # Nivel de significancia para la prueba de johanssen
+EG.procedure = c(TRUE,FALSE)[2]                # Ejecutar la metodología de Engle & Granger.
+#For Quarterly Data
 if(frequency=="Quarterly"){
   file.name  = "Belize_Quarterly.xlsx"
   # Nombres de columnas que contiene las variables para el VAR.
   variables  = c("Revenue Current",	"Revenue Current - Base 2000",	"Total Revenue and Grants - Base 2000",
                  "Total Revenue and Grants",	"Expenditure Current",	"Expenditure Current - Base 2000",	
-                 "Total Expenditure",	"Total Expenditure - Base 2000",	"GDP - Base 2000",	"GDP - Base 2014")[c(2,9)]
+                 "Total Expenditure",	"Total Expenditure - Base 2000",	"GDP - Base 2000",	"GDP - Base 2014")[c(8,9)]
   start.date = c(2000,1)
   frequency  = 4
 }
-
 #For yearly data
 if (frequency=="Yearly"){
-  file.name    = "Yearly_Current.xlsx"
+  file.name    = c("Yearly_Current_Expenditure.xlsx","Yearly_Current_Revenue.xlsx")[2]
   # Nombres de columnas que contiene las variables para el VAR.
-  variables    = c( "Total expenditures"
-                    ,"Total recurrent expenditure"
-                    ,"Personal emoluments"
-                    ,"Pensions and ex-gratia"
-                    ,"Goods and services"
-                    ,"Debt service-interest and other charges"
-                    ,"GDP")[c(6,7)]
-  start.date = c(2001)
+  if (file.name=="Yearly_Current_Expenditure.xlsx") {
+    variables    = c( "Total expenditures"
+                      ,"Total recurrent expenditure"
+                      ,"Personal emoluments"
+                      ,"Pensions and ex-gratia"
+                      ,"Goods and services"
+                      ,"Debt service-interest and other charges"
+                      ,"GDP")[c(6,7)]
+    start.date = c(2001)
+    frequency  = 1
+  }
+  if (file.name=="Yearly_Current_Revenue.xlsx"){
+  variables    = c("Total revenues and grants"
+                   ,"Recurrent Revenue"
+                   ,"Tax Revenue"
+                   ,"Income and Profits"
+                   ,"Taxes on Property"
+                   ,"Taxes on Int' Trade and Transactions"
+                   ,"Taxes on Goods and Services"
+                   ,"Non-Tax Revenue"
+                   ,"Property income and transfers"
+                   ,"Licences"
+                   ,"Royalties"
+                   ,"Government ministries"
+                   ,"Repayment of old loans"
+                   ,"GDP")[c(13,14)] 
+  if (variables[1]=="Taxes on Property" |
+      variables[1]=="Taxes on Int' Trade and Transactions" |
+      variables[1]=="Property income and transfers") diff.all=TRUE
+  start.date = c(2000)
   frequency  = 1
+  }
 } 
-
-log.all      = c(TRUE,FALSE)[1]                # Verdadero transforma todas las series en logaritmos.
-diff.all     = c(TRUE,FALSE)[2]                # Verdadero obtiene la primera diferencia de las series.
-max.lags     = 10                              # Número máximo posible para el orden p del VAR. 
-lags.pt.test = c(10,15,20,30,50,75)            # Rezagos a usar para las pruebas de autocorrelación serial. (Portmanteau statistic)
-n.ahead      = 4                               # Número de pasos adelante para el pronóstico.
-eigen.confidence = c("10pct","5pct","1pct")[2] # Nivel de significancia para la prueba de johanssen
-EG.procedure = c(TRUE,FALSE)[2]                # Ejecutar la metodología de Engle & Granger.
 
 # Datos -------------------------------------------------------------------
 Data = read_xlsx(paste0(getwd(),"/",file.name))
@@ -218,9 +240,12 @@ if (rank.type=="reduced") {
   write.xlsx(levels, file = paste0("VECM_",n.ahead,"_step_ahead_forecast_",variables[1],"_With_",variables[2],".xlsx"))
   x11()
   plot(predict)
+  cat("AIC of VAR representation of VEC: ",AIC(VAR.rep))
   
-  
-}else if (rank.type=="complete" & sum(Int.Order)==0){
+}
+
+# VAR in levels -----------------------------------------------------------
+if (rank.type=="complete" & sum(Int.Order)==0){
   # Pronóstico con VAR en niveles
   cat("Forecasting VAR in levels")
   predict=predict(VAR, n.ahead=n.ahead)
@@ -235,11 +260,12 @@ if (rank.type=="reduced") {
   
   x11()
   plot(predict)
+  cat("AIC of VAR: ",AIC(VAR))
   
-  x11()
-  for (i in lags.pt.test) {
-    plot(serial.test(VAR, lags.pt = i, type = "PT.asymptotic"), title=paste(i," lags"))
-  } 
+  # x11()
+  # for (i in lags.pt.test) {
+  #   plot(serial.test(VAR, lags.pt = i, type = "PT.asymptotic"), title=paste(i," lags"))
+  # } 
   
   # Navegue por el dispositivo gráfico para ver el 
   # resumen de resultados del Test para cada variable
@@ -247,11 +273,13 @@ if (rank.type=="reduced") {
   
   
   ##Test Jarque-Bera multivariado
-  norm.test=normality.test(VAR.IR) #
-  if(norm.test$jb.mul$JB$p.value<0.05)cat("Rejection for normality.")
-  if(norm.test$jb.mul$JB$p.value>0.05)cat("No rejection for normality.")
-  
-}else if (rank.type=="zero" & sum(Int.Order)==length(variables)){
+  #norm.test=normality.test(VAR.IR) #
+  #if(norm.test$jb.mul$JB$p.value<0.05)cat("Rejection for normality.")
+  #if(norm.test$jb.mul$JB$p.value>0.05)cat("No rejection for normality.")
+}
+
+# VAR in Differences ------------------------------------------------------
+if ((rank.type=="zero"|rank.type=="complete") & sum(Int.Order)==length(variables)){
   # Estimación del VAR ------------------------------------------------------
   
   # Estimamos los modelos con tendencia y constante, sólo constante, y sólo términos deterministicos.
@@ -286,11 +314,12 @@ if (rank.type=="reduced") {
   write.xlsx(levels, file = paste0("VAR_",n.ahead,"_step_ahead_forecast_",variables[1],"_With_",variables[2],".xlsx"))
   x11()
   plot(predict)
+  cat("AIC of VAR: ",AIC(VAR))
 }
 
 
+# When series Integration order differ ------------------------------------
 # Engle & Granger ---------------------------------------------------------
-
 if (EG.procedure==TRUE) {
   spread    = Data[,1]-Data[,2]
   Data.plot = cbind(Data, spread)
@@ -354,10 +383,6 @@ if (EG.procedure==TRUE) {
   coint.test(Data[,1], Data[,2], nlag=6)
   
 }
-
-
-
-
 #Pruebas
 if(0){
   # Pruebas de correlación serial -------------------------------------------
