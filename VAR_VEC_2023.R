@@ -14,7 +14,7 @@ if (1) {
   library(aTSA)
 }
 # Parámetros del  modelo
-frequency     = c("Quarterly", "Yearly")[2]
+frequency     = c("Quarterly", "Yearly")[1]
 log.all      = c(TRUE,FALSE)[1]                # Verdadero transforma todas las series en logaritmos.
 diff.all     = c(TRUE,FALSE)[2]                # Verdadero obtiene la primera diferencia de las series.
 max.lags     = 10                              # Número máximo posible para el orden p del VAR. 
@@ -26,9 +26,8 @@ EG.procedure = c(TRUE,FALSE)[2]                # Ejecutar la metodología de Eng
 if(frequency=="Quarterly"){
   file.name  = "Belize_Quarterly.xlsx"
   # Nombres de columnas que contiene las variables para el VAR.
-  variables  = c("Revenue Current",	"Revenue Current - Base 2000",	"Total Revenue and Grants - Base 2000",
-                 "Total Revenue and Grants",	"Expenditure Current",	"Expenditure Current - Base 2000",	
-                 "Total Expenditure",	"Total Expenditure - Base 2000",	"GDP - Base 2000",	"GDP - Base 2014")[c(8,9)]
+  variables  = c("Revenue Current", "Total Revenue and Grants", "Expenditure Current",	
+                 "Total Expenditure","GDP current")[c(3,5)]
   start.date = c(2000,1)
   frequency  = 4
 }
