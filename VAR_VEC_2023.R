@@ -1,5 +1,6 @@
 # Paquetes 
 if (1) {
+  library(xlsx)
   library(vars)
   library(urca)
   library(ggplot2)
@@ -19,7 +20,7 @@ log.all      = c(TRUE,FALSE)[1]                # Verdadero transforma todas las 
 diff.all     = c(TRUE,FALSE)[2]                # Verdadero obtiene la primera diferencia de las series.
 max.lags     = 10                              # Número máximo posible para el orden p del VAR. 
 lags.pt.test = c(10,15,20,30,50,75)            # Rezagos a usar para las pruebas de autocorrelación serial. (Portmanteau statistic)
-n.ahead      = 14                               # Número de pasos adelante para el pronóstico.
+n.ahead      = 19                               # Número de pasos adelante para el pronóstico.
 eigen.confidence = c("10pct","5pct","1pct")[2] # Nivel de significancia para la prueba de johanssen
 EG.procedure = c(TRUE,FALSE)[2]                # Ejecutar la metodología de Engle & Granger.
 #For Quarterly Data
@@ -27,9 +28,10 @@ if(frequency=="Quarterly"){
   file.name  = "Belize_Quarterly.xlsx"
   # Nombres de columnas que contiene las variables para el VAR.
   variables  = c("Revenue Current", "Total Revenue and Grants", "Expenditure Current",	
-                 "Total Expenditure","GDP current")[c(3,5)]
+                 "Total Expenditure","GDP current")[c(4,5)]
   start.date = c(2000,1)
   frequency  = 4
+  lagmax=6
 }
 #For yearly data
 if (frequency=="Yearly"){
@@ -45,6 +47,7 @@ if (frequency=="Yearly"){
                       ,"GDP")[c(6,7)]
     start.date = c(2001)
     frequency  = 1
+    lagmax=2
   }
   if (file.name=="Yearly_Current_Revenue.xlsx"){
   variables    = c("Total revenues and grants"
@@ -139,8 +142,8 @@ if (sum(Int.Order)==0) {
   cat("Series are I(0):Estimating a VAR in levels.")
 }else if (sum(Int.Order)==length(variables)) cat("Series are I(1): Estimating VAR and  evaluating for cointegration (Johansen) \n")
 
-if (frequency=="Yearly")    lagmax=2
-if (frequency=="Quarterly") lagmax=6
+#if (frequency=="Yearly")    lagmax=2
+#if (frequency=="Quarterly") lagmax=6
 
 # Extraemos los rezagos óptimos para el modelo con tendencia y deriva.
 P.tr.cons = VARselect(Data, lag.max=lagmax, type="both", season=NULL)
