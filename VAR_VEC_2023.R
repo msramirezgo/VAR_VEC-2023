@@ -13,79 +13,62 @@ if (1) {
   library(tsDyn)
   library(dynlm)
   library(aTSA)
+  require(lubridate)
+  require(zoo)
 }
 # Parámetros del  modelo
-frequency     = c("Quarterly", "Yearly")[1]
+Frequency     = c("Quarterly", "Yearly")[2]
 log.all      = c(TRUE,FALSE)[1]                # Verdadero transforma todas las series en logaritmos.
 diff.all     = c(TRUE,FALSE)[2]                # Verdadero obtiene la primera diferencia de las series.
 max.lags     = 10                              # Número máximo posible para el orden p del VAR. 
 lags.pt.test = c(10,15,20,30,50,75)            # Rezagos a usar para las pruebas de autocorrelación serial. (Portmanteau statistic)
-n.ahead      = 19                               # Número de pasos adelante para el pronóstico.
+n.ahead      = 5                              # Número de pasos adelante para el pronóstico.
 eigen.confidence = c("10pct","5pct","1pct")[2] # Nivel de significancia para la prueba de johanssen
-EG.procedure = c(TRUE,FALSE)[2]                # Ejecutar la metodología de Engle & Granger.
+EG.procedure = c(TRUE, FALSE)[2]               # Ejecutar la metodología de Engle & Granger.
+Seasonal     = c(TRUE, FALSE)[2]               # ¿Desestacionalizar las series previo a la estimación? 
+                                               #(Hacer análisis individual de las series previo a modificar el parámetro)
 #For Quarterly Data
-if(frequency=="Quarterly"){
+if(Frequency=="Quarterly"){
   file.name  = "Belize_Quarterly.xlsx"
   # Nombres de columnas que contiene las variables para el VAR.
   variables  = c("Revenue Current", "Total Revenue and Grants", "Expenditure Current",	
-                 "Total Expenditure","GDP current")[c(4,5)]
-  start.date = c(2000,1)
+                 "Total Expenditure","GDP")[c(2,4,5)]
+  start.date = c(1990,2)
   frequency  = 4
   lagmax=6
 }
 #For yearly data
-if (frequency=="Yearly"){
-  file.name    = c("Yearly_Current_Expenditure.xlsx","Yearly_Current_Revenue.xlsx")[2]
+if (Frequency=="Yearly"){
+  file.name    = "Belize_Yearly.xlsx"
   # Nombres de columnas que contiene las variables para el VAR.
-  if (file.name=="Yearly_Current_Expenditure.xlsx") {
-    variables    = c( "Total expenditures"
-                      ,"Total recurrent expenditure"
-                      ,"Personal emoluments"
-                      ,"Pensions and ex-gratia"
-                      ,"Goods and services"
-                      ,"Debt service-interest and other charges"
-                      ,"GDP")[c(6,7)]
-    start.date = c(2001)
-    frequency  = 1
-    lagmax=2
-  }
-  if (file.name=="Yearly_Current_Revenue.xlsx"){
-  variables    = c("Total revenues and grants"
-                   ,"Recurrent Revenue"
-                   ,"Tax Revenue"
-                   ,"Income and Profits"
-                   ,"Taxes on Property"
-                   ,"Taxes on Int' Trade and Transactions"
-                   ,"Taxes on Goods and Services"
-                   ,"Non-Tax Revenue"
-                   ,"Property income and transfers"
-                   ,"Licences"
-                   ,"Royalties"
-                   ,"Government ministries"
-                   ,"Repayment of old loans"
-                   ,"GDP")[c(13,14)] 
-  if (variables[1]=="Taxes on Property" |
-      variables[1]=="Taxes on Int' Trade and Transactions" |
-      variables[1]=="Property income and transfers") diff.all=TRUE
-  start.date = c(2000)
+  variables    = c( "Total Expenditures","Total Revenues and Grants","GDP")[c(2,3)]
+  start.date = c(1990)
   frequency  = 1
-  }
+  lagmax= 6
 } 
 
 # Datos -------------------------------------------------------------------
 Data = read_xlsx(paste0(getwd(),"/",file.name))
 Data = ts(Data[,variables], start = start.date,   frequency = frequency)
-#if (variables[1]=="Total expenditures"|variables[1]=="Total recurrent expenditure") {
-# Data=Data[3:nrow(Data),] 
-#}
 
 # Graficación -------------------------------------------------------------
+# Series en nivel
 x11()
 par(mfrow=c(length(variables),1))
 for (i in variables) {
   plot.ts(Data[,i], col="steelblue", xlab="",ylab="", main=i)
-} # Hacer análisis manual de resultados del test. 
+} 
 
+# Series desestacionalizadas
+if (Seasonal==TRUE) {
+  for (i in variables) {
+    decomposition = stl(Data[,i],s.window="periodic")
+    adjusted = decomposition$time.series[,2] + decomposition$time.series[,3]
+    Data[,i] = adjusted
+  }
+  x11()
+  plot(Data, main="Seasonally adjusted data")
+}
 
 # Transformaciones --------------------------------------------------------
 if (log.all==TRUE)  {
@@ -233,13 +216,29 @@ if (rank.type=="reduced") {
   coefA(VEC)
   # Representación VAR
   VAR.rep = vec2var(eigen, r=rank)
-
   # Pronóstico de la representación VAR
   cat("Forecasting VECM in it's VAR representation \n")
-  predict =predict(VAR.rep, n.ahead=n.ahead)
-  forecast    = cbind(as.matrix(predict$fcst[[1]][,"fcst"]),as.matrix(predict$fcst[[2]][,"fcst"]))
-  if(log.all==TRUE)levels = exp(as.matrix(rbind(Data, forecast)))
-  write.xlsx(levels, file = paste0("VECM_",n.ahead,"_step_ahead_forecast_",variables[1],"_With_",variables[2],".xlsx"))
+  predict     = predict(VAR.rep, n.ahead=n.ahead)
+  #forecast    = cbind(as.matrix(predict$fcst[[1]][,"fcst"]),as.matrix(predict$fcst[[2]][,"fcst"]))
+  for (i in 1:length(variables)) {
+    forecast             = predict$fcst[[i]]
+    levels               = as.matrix(rbind(as.matrix(Data[,i]), as.matrix(forecast[,"fcst"])))
+    upper                = as.matrix(rbind(as.matrix(rep(0,length(Data[,i]))), as.matrix(forecast[,"upper"])))
+    lower                = as.matrix(rbind(as.matrix(rep(0,length(Data[,i]))), as.matrix(forecast[,"lower"])))
+    upper[nrow(Data),]   = Data[nrow(Data),i]
+    lower[nrow(Data),]   = Data[nrow(Data),i]
+    levels.data          = cbind(levels, lower, upper)
+    levels.data = ts(levels.data, start = start.date,   frequency = frequency)
+    if(log.all==TRUE) levels.data = exp(levels.data)
+    colnames(levels.data)= c(variables[i], paste0("Lower ",variables[i]), paste0("Upper ",variables[i])) 
+    if (Frequency=="Quarterly") {
+      Time_Index   = as.yearqtr(time(levels.data)) 
+    }else if (Frequency=="Yearly"){
+      Time_Index   = time(levels.data)
+    }
+    levels.data = data.frame(Time_Index, levels.data)
+    write.xlsx(levels.data , file = paste0(variables[i],"_",n.ahead,"_step_ahead_Forecast","-",length(variables),"_Variables_VECM_",".xlsx"))
+  }
   x11()
   plot(predict)
   cat("AIC of VAR representation of VEC: ",AIC(VAR.rep))
@@ -251,15 +250,25 @@ if (rank.type=="complete" & sum(Int.Order)==0){
   # Pronóstico con VAR en niveles
   cat("Forecasting VAR in levels")
   predict=predict(VAR, n.ahead=n.ahead)
-  forecast    = cbind(as.matrix(predict$fcst[[1]][,"fcst"]),as.matrix(predict$fcst[[2]][,"fcst"]))
-  levels      = as.matrix(rbind(Data, forecast))
-  for (i in nrow(Data):(nrow(Data)+n.ahead-1)) {
-    levels[i+1,]=levels[i,]+levels[i+1,]
+  for (i in 1:length(variables)) {
+    forecast             = predict$fcst[[i]]
+    levels               = as.matrix(rbind(as.matrix(Data[,i]), as.matrix(forecast[,"fcst"])))
+    upper                = as.matrix(rbind(as.matrix(rep(0,length(Data[,i]))), as.matrix(forecast[,"upper"])))
+    lower                = as.matrix(rbind(as.matrix(rep(0,length(Data[,i]))), as.matrix(forecast[,"lower"])))
+    upper[nrow(Data),]   = Data[nrow(Data),i]
+    lower[nrow(Data),]   = Data[nrow(Data),i]
+    levels.data          = cbind(levels, lower, upper)
+    levels.data = ts(levels.data, start = start.date,   frequency = frequency)
+    if(log.all==TRUE) levels.data = exp(levels.data)
+    colnames(levels.data)= c(variables[i], paste0("Lower ",variables[i]), paste0("Upper ",variables[i])) 
+    if (Frequency=="Quarterly") {
+      Time_Index   = as.yearqtr(time(levels.data)) 
+    }else if (Frequency=="Yearly"){
+      Time_Index   = time(levels.data)
+    }
+    levels.data = data.frame(Time_Index, levels.data)
+    write.xlsx(levels.data , file = paste0(variables[i],"_",n.ahead,"_step_ahead_Forecast","-",length(variables),"_Variables_VAR_",".xlsx"))
   }
-  levels = ts(levels, start = start.date,   frequency = frequency)
-  if(log.all==TRUE)levels = exp(levels)
-  write.xlsx(levels, file = paste0("VAR_",n.ahead,"_step_ahead_forecast_",variables[1],"_With_",variables[2],".xlsx"))
-  
   x11()
   plot(predict)
   cat("AIC of VAR: ",AIC(VAR))
@@ -306,14 +315,31 @@ if ((rank.type=="zero"|rank.type=="complete") & sum(Int.Order)==length(variables
   
   cat("Forecasting VAR in first differences \n")
   predict     = predict(VAR, n.ahead=n.ahead)
-  forecast    = cbind(as.matrix(predict$fcst[[1]][,"fcst"]),as.matrix(predict$fcst[[2]][,"fcst"]))
-  levels      = as.matrix(rbind(Data, forecast))
-  for (i in nrow(Data):(nrow(Data)+n.ahead-1)) {
-    levels[i+1,]=levels[i,]+levels[i+1,]
-  }
-  levels = ts(levels, start = start.date,   frequency = frequency)
-  if(log.all==TRUE)levels = exp(levels)
-  write.xlsx(levels, file = paste0("VAR_",n.ahead,"_step_ahead_forecast_",variables[1],"_With_",variables[2],".xlsx"))
+  #forecast    = cbind(as.matrix(predict$fcst[[1]][,"fcst"]),as.matrix(predict$fcst[[2]][,"fcst"]))
+  for (i in 1:length(variables)) {
+    forecast             = predict$fcst[[i]]
+    levels               = as.matrix(rbind(as.matrix(Data[,i]), as.matrix(forecast[,"fcst"])))
+    upper                = as.matrix(rbind(as.matrix(rep(0,length(Data[,i]))), as.matrix(forecast[,"upper"])))
+    lower                = as.matrix(rbind(as.matrix(rep(0,length(Data[,i]))), as.matrix(forecast[,"lower"])))
+    upper[nrow(Data),]   = Data[nrow(Data),i]
+    lower[nrow(Data),]   = Data[nrow(Data),i]
+    for (j in nrow(Data):(nrow(Data)+n.ahead-1)) {
+      levels[j+1,]= levels[j,]+levels[j+1,]
+      upper[j+1,] = upper[j,]+upper[j+1,]
+      lower[j+1,] = lower[j,]+lower[j+1,]
+    }
+    levels.data          = cbind(levels, lower, upper)
+    levels.data = ts(levels.data, start = start.date,   frequency = frequency)
+    if(log.all==TRUE) levels.data = exp(levels.data)
+    colnames(levels.data)= c(variables[i], paste0("Lower ",variables[i]), paste0("Upper ",variables[i])) 
+    if (Frequency=="Quarterly") {
+      Time_Index   = as.yearqtr(time(levels.data)) 
+    }else if (Frequency=="Yearly"){
+      Time_Index   = time(levels.data)
+    }
+    levels.data = data.frame(Time_Index, levels.data)
+    write.xlsx(levels.data , file = paste0(variables[i],"_",n.ahead,"_step_ahead_Forecast","-",length(variables),"_Variables_VAR_Diff_",".xlsx"))
+  }  
   x11()
   plot(predict)
   cat("AIC of VAR: ",AIC(VAR))
